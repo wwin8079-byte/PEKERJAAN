@@ -42,6 +42,9 @@ button:active{transform:scale(.98)}
 details{margin-top:12px;border-top:1px dashed var(--line);padding-top:8px}
 .card>details{margin:0;border:0;padding:0}
 summary{cursor:pointer;font-weight:600;color:var(--mut);font-size:13px}
+.tabs{display:flex;gap:6px;margin-bottom:8px}
+.tabs button{flex:1}
+.tabs button.on{background:var(--acc2);border-color:var(--acc);color:var(--acc)}
 #out{font:13.5px/1.5 ui-monospace,Menlo,Consolas,monospace;min-height:160px;white-space:pre-wrap}
 .hist{display:flex;gap:6px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}
 .hist span{flex:1}
@@ -51,25 +54,7 @@ summary{cursor:pointer;font-weight:600;color:var(--mut);font-size:13px}
 .hint{font-size:12px;color:var(--mut);margin-top:6px}
 .prev{background:var(--acc2);color:var(--ink);border-radius:8px;padding:8px 10px;font-size:13px;margin-top:8px;white-space:pre-wrap}
 .admin{border-color:var(--acc)}
-button.jambtn{width:100%;text-align:left;background:var(--bg);font-weight:600;padding:8px 10px}
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;z-index:20;padding:12px}
-.mbox{background:var(--card);border-radius:16px;padding:16px;width:min(330px,94vw);border:1px solid var(--line)}
-.mhead{display:flex;justify-content:center;align-items:center;gap:6px;font-size:36px;font-weight:700;margin-bottom:6px}
-.seg{font-size:36px;line-height:1;padding:6px 12px;border-radius:10px;border:0;background:var(--bg);color:var(--ink)}
-.seg.on{background:var(--acc);color:#fff}
-#dial{width:100%;display:block;touch-action:none;user-select:none;-webkit-user-select:none}
-.dbg{fill:var(--bg);stroke:var(--line)}
-.dhand{stroke:var(--acc);stroke-width:2}
-.dknob{fill:var(--acc)}
-.dl{fill:var(--ink);font-size:15px;font-family:inherit;pointer-events:none}
-.dl.in{font-size:12px;fill:var(--mut)}
-.dl.dsel{fill:#fff}
 .hidden{display:none}
-.modal.hidden{display:none}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:2px}
-.chips label{display:flex;align-items:center;gap:6px;margin:0;padding:7px 12px;border:1px solid var(--line);border-radius:20px;background:var(--bg);font-size:14px;font-weight:500;color:var(--ink);cursor:pointer}
-.chips label.on{border-color:var(--acc);background:var(--acc2)}
-.chips input{width:18px;height:18px;padding:0;accent-color:var(--acc)}
 button:disabled{opacity:.45;cursor:not-allowed}
 .hint.warn{color:var(--warn);margin-top:2px}.hint.warn:empty{display:none}
 </style>
@@ -92,10 +77,11 @@ button:disabled{opacity:.45;cursor:not-allowed}
   <div id="work" class="hidden">
     <div class="card">
       <h2>Pengaturan pesan</h2>
-      <label style="margin-top:0">Jenis pekerjaan (boleh pilih lebih dari satu)</label>
-      <div class="chips" id="jenis"></div>
       <div class="grid">
-        <div><label>Jam (ketuk untuk pilih)</label><button type="button" id="jam" class="jambtn"></button></div>
+        <div><label style="margin-top:0">Jenis pekerjaan</label><select id="jenis"></select></div>
+        <div><label style="margin-top:0">Waktu</label>
+          <select id="sesi"><option value="pagi">Pagi</option><option value="siang">Siang</option><option value="sore">Sore</option><option value="malam">Malam</option></select></div>
+        <div><label>Jam (otomatis, bisa diubah)</label><input id="jam" placeholder="mis. 09.00"></div>
         <div><label>Tanggal</label><input type="date" id="date"></div>
       </div>
       <p class="hint" id="sesiHint"></p>
@@ -103,10 +89,14 @@ button:disabled{opacity:.45;cursor:not-allowed}
 
     <h2 style="margin:4px 2px 8px">2. Periksa &amp; lengkapi</h2>
     <div id="cards"></div>
-    <div class="row" style="margin:0 0 12px"><button id="btnAdd">+ Tambah kartu baru (lokasi / pelanggan lain)</button></div>
+    <div class="row" style="margin:0 0 12px"><button id="btnAdd">+ Tambah pekerjaan</button></div>
 
     <div class="card">
       <h2>3. Hasil — salin &amp; kirim</h2>
+      <div class="tabs">
+        <button id="tabPlan" class="on">Plan (sebelum kerja)</button>
+        <button id="tabRep">Laporan (setelah kerja)</button>
+      </div>
       <textarea id="out" readonly></textarea>
       <div class="row">
         <button class="p" id="btnCopy">📄 Salin</button>
@@ -124,12 +114,6 @@ button:disabled{opacity:.45;cursor:not-allowed}
   </div>
   <p class="hint" id="cfgNote"></p>
 </div>
-<div id="clockModal" class="modal hidden"><div class="mbox">
-  <div class="mhead"><button type="button" id="cH" class="seg on">09</button><span>:</span><button type="button" id="cM" class="seg">00</button></div>
-  <p class="hint" id="cHint" style="text-align:center;margin:0 0 6px"></p>
-  <svg id="dial" viewBox="0 0 260 260" role="img" aria-label="Jam analog"></svg>
-  <div class="row"><button type="button" id="cCancel">Batal</button><button type="button" id="cOk" class="p">OK</button></div>
-</div></div>
 <div id="toast"></div>
 
 <script>
@@ -140,11 +124,9 @@ const nm=s=>s.replace(/\S+/g,w=>/^(dan|dgn|dengan|&)$/i.test(w)?w.toLowerCase():
 const TIME=/(?:jam|pukul|pkl\.?)\s*(\d{1,2})\s*[.:]\s*(\d{2})/i;
 const URLRE=/https?:\/\/\S+/;
 function sesiFromJam(j){const h=parseInt(j,10);return h<12?'pagi':h<15?'siang':h<18?'sore':'malam'}
-function newJob(what){return{what:what||'',who:'',where:'',time:'',why:'',how:[],pic:'',pasang:/pasang|pemasangan|install/i.test(what||''),links:[],more:[]}}
+function newJob(what){return{what:what||'',who:'',where:'',time:'',why:'',how:[],pic:'',status:'',hasil:'',kendala:'',tindak:'',pasang:/pasang|pemasangan|install/i.test(what||''),links:[]}}
 const MAXF=5;
-const PASANG=/pasang|pemasangan|install/i;
-const whatsStr=j=>[j.what].concat(j.more||[]).map(x=>(x||'').trim()).filter(Boolean).join(' + ');
-function norm(jobs){(jobs||[]).forEach(j=>{j.links=Array.isArray(j.links)?j.links:[];j.more=Array.isArray(j.more)?j.more:[];delete j.fotos;j.pasang=!!j.pasang});return jobs}
+function norm(jobs){(jobs||[]).forEach(j=>{j.links=Array.isArray(j.links)?j.links:[];delete j.fotos;j.pasang=!!j.pasang});return jobs}
 function parsePic(v){
   const m=v.match(/\+?\d[\d\s.-]{7,}\d/);
   const ph=m?m[0].trim():'';
@@ -174,14 +156,14 @@ function parse(raw,SESIMAP){
   });
   const hj=head.join(' ');
   const ht=hj.match(TIME);
-  const headTime=ht?ht[1].padStart(2,'0')+'.'+ht[2]:'';
+  const headTime=ht?ht[1].replace(/^0(\d)/,'$1')+'.'+ht[2]:'';
   jobs.forEach(j=>{
     const t=(j.what+' '+j.how.map(h=>h.t).join(' ')).match(TIME);
-    j.time=t?t[1].padStart(2,'0')+'.'+t[2]:'';
+    j.time=t?t[1]+'.'+t[2]:'';
   });
   const all=(hj+' '+jobs.map(j=>j.what).join(' ')).toLowerCase();
-  const KW={pengantaran:/pengantar|antar|kirim/,pemasangan:/pemasang|pasang|install/,pembongkaran:/bongkar/};
-  const jenis=Object.keys(KW).filter(k=>KW[k].test(all));
+  const pa=/pengantar|antar|kirim/.test(all),ps=/pemasang|pasang|install/.test(all);
+  const jenis=pa&&ps?'pemasangan & pengantaran':ps?'pemasangan':pa?'pengantaran':'';
   let jam=headTime||(jobs.find(j=>j.time)||{}).time||'';
   let sesi=(hj.toLowerCase().match(/\b(pagi|siang|sore|malam)\b/)||[])[1]||'';
   if(!sesi&&jam)sesi=sesiFromJam(jam);
@@ -195,8 +177,8 @@ const DEF={
   sapaan:'Pak kita ada',
   template:'{sapaan} {jenis} {waktu} {jam}, berikut listnya :',
   zona:'WIB',
-  jenis:['pengantaran','pemasangan','pembongkaran'],
-  sesi:{pagi:'09.00',siang:'13.00',sore:'16.00',malam:'19.00'},
+  jenis:['pengantaran','pemasangan','pemasangan & pengantaran'],
+  sesi:{pagi:'09.00',siang:'13.30',sore:'16.00',malam:'19.30'},
   labels:{tim:'Tim',lokasi:'Lokasi',waktu:'Waktu',tujuan:'Tujuan',pic:'PIC',catatan:'Catatan',simulasi:'Simulasi'},
   penutup:'',
   wajib:{what:true,who:true,where:true,time:true,why:true,how:true,foto:true}
@@ -224,15 +206,12 @@ const $=id=>document.getElementById(id);
 const KEY='rf-plan-draft-v2',HKEY='rf-plan-hist-v2';
 const DAYS=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
 const MON=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-const S={raw:'',date:'',jobs:[],jenis:['pengantaran'],sesi:'pagi',jam:'09.00'};
+const S={raw:'',date:'',jobs:[],tab:'plan',jenis:'pengantaran',sesi:'pagi',jam:'09.00'};
 const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 function fmtDate(s){if(!s)return'';const[p,q,r]=s.split('-').map(Number);const d=new Date(p,q-1,r);return DAYS[d.getDay()]+', '+r+' '+MON[q-1]+' '+p}
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const timeTxt=t=>t?t+(/^\d{1,2}[.:]\d{2}$/.test(t)?' '+CFG.zona:''):'';
 const cap1=s=>s?s[0].toUpperCase()+s.slice(1):s;
-function fillJam(){const e=$('jam');if(e)e.textContent='🕒 '+S.jam+' '+CFG.zona}
-function toArr(v){if(Array.isArray(v))return v.filter(Boolean);if(typeof v==='string'&&v)return v.split(/\s*&\s*|\s*,\s*/).filter(Boolean);return[CFG.jenis[0]]}
-function jenisStr(){const a=toArr(S.jenis);if(!a.length)return'pekerjaan';if(a.length===1)return a[0];return a.slice(0,-1).join(', ')+' & '+a[a.length-1]}
 
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove('on'),1800)}
 function copy(text,sel){
@@ -265,13 +244,12 @@ function headLine(c){
   if(S.date===iso(new Date()))w=S.sesi?S.sesi+' ini':'hari ini';
   else if(S.date===iso(tm))w='besok'+(S.sesi?' '+S.sesi:'');
   const jam=S.jam?'jam '+S.jam+(/^\d{1,2}[.:]\d{2}$/.test(S.jam)?' '+c.zona:''):'';
-  return c.template.replace(/\{sapaan\}/g,c.sapaan).replace(/\{jenis\}/g,jenisStr()).replace(/\{waktu\}/g,w).replace(/\{jam\}/g,jam)
+  return c.template.replace(/\{sapaan\}/g,c.sapaan).replace(/\{jenis\}/g,S.jenis||'pekerjaan').replace(/\{waktu\}/g,w).replace(/\{jam\}/g,jam)
     .replace(/[ \t]{2,}/g,' ').replace(/ ,/g,',').trim();
 }
 function jobBlock(j,n){
   const L=CFG.labels;
   let t='\n*'+n+'. '+((j.what||'').trim()||'-')+'*\n';
-  (j.more||[]).filter(x=>x.trim()).forEach(x=>{t+='*+ '+x.trim()+'*\n'});
   if(j.where)t+=L.lokasi+': '+j.where+'\n';
   if(j.time&&j.time!==S.jam)t+=L.waktu+': '+timeTxt(j.time)+'\n';
   if(j.why)t+=L.tujuan+': '+j.why+'\n';
@@ -294,32 +272,47 @@ function planText(){
   }
   return t;
 }
+const STAT={selesai:'✅ Selesai',proses:'🔄 Dalam proses',kendala:'⚠️ Terkendala',tunda:'⏸️ Ditunda'};
+function repText(){
+  const L=CFG.labels;
+  let t='📝 *LAPORAN PEKERJAAN*\n🗓️ '+fmtDate(S.date)+'\n';
+  S.jobs.forEach((j,i)=>{
+    t+='\n*'+(i+1)+'. '+(j.what||'-')+'*\n';
+    t+='Status: '+(STAT[j.status]||'-')+'\n';
+    if(j.who)t+=L.tim+': '+j.who+'\n';
+    if(j.where)t+=L.lokasi+': '+j.where+'\n';
+    if(j.time||S.jam)t+=L.waktu+': '+timeTxt(j.time||S.jam)+'\n';
+    if(j.why)t+=L.tujuan+': '+j.why+'\n';
+    if(j.pasang&&okLinks(j).length)t+=linkLines(j,L);
+    const h=j.how.filter(x=>x.t.trim());
+    if(h.length)t+='Pelaksanaan:\n'+h.map(x=>(x.done?'✅ ':'⬜ ')+x.t.trim()).join('\n')+'\n';
+    t+='*Hasil*: '+(j.hasil||'-')+'\n';
+    t+='*Kendala*: '+(j.kendala||'-')+'\n';
+    t+='*Tindak lanjut*: '+(j.tindak||'-')+'\n';
+    if(j.pic)t+=L.pic+': '+j.pic+'\n';
+  });
+  return t.trim();
+}
 function clarText(){
   const parts=[];
   S.jobs.forEach((j,i)=>{
     const m=missing(j);if(!m.length)return;
-    parts.push('Pekerjaan '+(i+1)+' ('+(whatsStr(j)||'-')+'):\n'+m.map(r=>'- '+r[2]).join('\n'));
+    parts.push('Pekerjaan '+(i+1)+' ('+(j.what||'-')+'):\n'+m.map(r=>'- '+r[2]).join('\n'));
   });
   return parts.length?'Izin konfirmasi pak 🙏\nBiar tidak salah, mohon dilengkapi:\n\n'+parts.join('\n\n')+'\n\nTerima kasih pak.':'';
 }
 
 /* ===== UI ===== */
-function autoPasang(i,v){
-  const j=S.jobs[i];
-  if(!j||j.pasang||j.pasangOff||!PASANG.test(v))return;
-  j.pasang=true;renderFoto(i);
-  const c=document.querySelector('input[data-f="pasang"][data-i="'+i+'"]');if(c)c.checked=true;
-}
 function renderCards(){
   $('cards').innerHTML=S.jobs.map((j,i)=>`
   <div class="card" data-card="${i}">
     <div class="jobhead"><div class="num">${i+1}</div>
       <div style="flex:1"><label style="margin-top:0"><b>What</b> — Pekerjaan</label><input data-i="${i}" data-f="what" value="${esc(j.what)}"></div>
-      <button class="x" data-act="deljob" data-i="${i}" title="Hapus kartu">✕</button></div>
-    ${(j.more||[]).map((m,k)=>`<div class="how"><input data-i="${i}" data-mk="${k}" value="${esc(m)}" placeholder="Pekerjaan lain (What)…"><button class="x" data-act="delmore" data-i="${i}" data-n="${k}" title="Hapus">✕</button></div>`).join('')}
-    <div class="row"><button class="g" data-act="addmore" data-i="${i}">＋ Tambah pekerjaan (What)</button></div>
-    <label><b>Who</b> — Tim</label><input data-i="${i}" data-f="who" value="${esc(j.who)}" placeholder="Siapa saja yang berangkat">
-    ${j.time?`<div class="hint">🕒 Jam khusus pekerjaan ini: <b>${esc(j.time)}</b> <button class="g" data-act="cleartime" data-i="${i}" style="padding:3px 8px;font-size:12px">pakai jam utama</button></div>`:''}
+      <button class="x" data-act="deljob" data-i="${i}" title="Hapus pekerjaan">✕</button></div>
+    <div class="grid">
+      <div><label><b>Who</b> — Tim</label><input data-i="${i}" data-f="who" value="${esc(j.who)}" placeholder="Siapa saja yang berangkat"></div>
+      <div><label><b>When</b> — Jam khusus (kosong = ikut jam utama)</label><input data-i="${i}" data-f="time" value="${esc(j.time)}" placeholder="${esc(S.jam||'mis. 10.00')}"></div>
+    </div>
     <label><b>Where</b> — Lokasi / link maps</label><textarea rows="2" data-i="${i}" data-f="where">${esc(j.where)}</textarea>
     <label><b>Why</b> — Tujuan / alasan</label><input data-i="${i}" data-f="why" value="${esc(j.why)}" placeholder="Biasanya tidak ada di pesan WA — isi / tanyakan">
     <label><b>How</b> — Langkah &amp; catatan (centang saat sudah dikerjakan)</label>
@@ -329,6 +322,13 @@ function renderCards(){
     <div id="foto${i}"></div>
     <label><b>PIC</b> — Kontak di lokasi</label><input data-i="${i}" data-f="pic" value="${esc(j.pic)}" placeholder="Nama – no. HP">
     <div class="miss" id="miss${i}"></div>
+    <details><summary>Laporan hasil (isi setelah selesai)</summary>
+      <label>Status</label>
+      <select data-i="${i}" data-f="status"><option value="">— pilih —</option>${Object.keys(STAT).map(k=>`<option value="${k}" ${j.status===k?'selected':''}>${STAT[k]}</option>`).join('')}</select>
+      <label>Hasil</label><textarea rows="2" data-i="${i}" data-f="hasil">${esc(j.hasil)}</textarea>
+      <label>Kendala</label><textarea rows="2" data-i="${i}" data-f="kendala">${esc(j.kendala)}</textarea>
+      <label>Tindak lanjut</label><textarea rows="2" data-i="${i}" data-f="tindak">${esc(j.tindak)}</textarea>
+    </details>
   </div>`).join('');
   S.jobs.forEach((j,i)=>renderFoto(i));
   refresh();
@@ -340,23 +340,25 @@ function refresh(){
     el.className='miss'+(m.length?'':' ok');
     el.textContent=m.length?'⚠ Belum jelas: '+m.map(r=>r[1].split(' ')[0]).join(', '):'✓ 5W1H lengkap';
   });
-  const txt=planText();
+  const txt=S.tab==='plan'?planText():repText();
   const o=$('out');o.value=txt;
   o.style.height='auto';o.style.height=Math.max(160,o.scrollHeight+4)+'px';
   $('btnWA').href='https://wa.me/?text='+encodeURIComponent(txt);
-  $('clar').classList.toggle('hidden',!clarText());
+  $('clar').classList.toggle('hidden',!clarText()||S.tab!=='plan');
   try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}
 }
 function fillJenis(){
-  const sel=toArr(S.jenis),list=CFG.jenis.slice();
-  sel.forEach(v=>{if(!list.includes(v))list.push(v)});
-  $('jenis').innerHTML=list.map(v=>`<label class="${sel.includes(v)?'on':''}"><input type="checkbox" value="${esc(v)}" ${sel.includes(v)?'checked':''}> ${esc(cap1(v))}</label>`).join('');
-  $('sesiHint').textContent='Ketuk jam → pilih jam di jam analog, lalu menitnya. Kata pagi / siang / sore / malam di judul pesan terisi otomatis.';
+  const sel=$('jenis');
+  const list=CFG.jenis.slice();if(S.jenis&&!list.includes(S.jenis))list.push(S.jenis);
+  sel.innerHTML=list.map(v=>`<option value="${esc(v)}">${esc(cap1(v))}</option>`).join('');
+  sel.value=S.jenis;
+  $('sesiHint').textContent='Pilih Pagi/Siang/Sore/Malam → jam terisi otomatis ('+CFG.sesi.pagi+' / '+CFG.sesi.siang+' / '+CFG.sesi.sore+' / '+CFG.sesi.malam+'). Jam juga bisa diketik manual.';
 }
-function syncCtl(){S.sesi=sesiFromJam(S.jam);fillJenis();fillJam();$('date').value=S.date}
+function syncCtl(){fillJenis();$('date').value=S.date;$('sesi').value=S.sesi;$('jam').value=S.jam}
+
 function load(parsed,raw){
   S.raw=raw;S.jobs=parsed.jobs;
-  {const low=raw.toLowerCase();const js=CFG.jenis.filter(j=>parsed.jenis.includes(j)||low.includes(j));S.jenis=js.length?js:(toArr(S.jenis).length?toArr(S.jenis):[CFG.jenis[0]])}
+  S.jenis=CFG.jenis.includes(parsed.jenis)?parsed.jenis:(S.jenis&&CFG.jenis.includes(S.jenis)?S.jenis:CFG.jenis[0]);
   S.sesi=parsed.sesi||'pagi';S.jam=parsed.jam||CFG.sesi[S.sesi];
   const d=new Date();if(parsed.tomorrow)d.setDate(d.getDate()+1);
   S.date=iso(d);syncCtl();
@@ -390,19 +392,14 @@ $('btnReset').onclick=function(){arm(this,()=>{
   try{localStorage.removeItem(KEY)}catch(e){}
 },'Yakin kosongkan?')};
 $('date').oninput=e=>{S.date=e.target.value;refresh()};
-$('jenis').addEventListener('change',e=>{
-  const t=e.target;if(!t||t.type!=='checkbox')return;
-  const set=new Set(toArr(S.jenis));if(t.checked)set.add(t.value);else set.delete(t.value);
-  const ord=CFG.jenis;S.jenis=Array.from(set).sort((x,y)=>{const a=ord.indexOf(x),b=ord.indexOf(y);return(a<0?99:a)-(b<0?99:b)});
-  t.parentNode.classList.toggle('on',t.checked);refresh();
-});
-$('jam').onclick=openClock;
+$('jenis').onchange=e=>{S.jenis=e.target.value;refresh()};
+$('sesi').onchange=e=>{S.sesi=e.target.value;S.jam=CFG.sesi[S.sesi];$('jam').value=S.jam;refresh()};
+$('jam').oninput=e=>{S.jam=e.target.value.trim();if(/^\d{1,2}[.:]\d{2}$/.test(S.jam)){S.sesi=sesiFromJam(S.jam);$('sesi').value=S.sesi}refresh()};
 $('btnAdd').onclick=()=>{S.jobs.push(newJob(''));renderCards()};
 
 $('cards').addEventListener('input',e=>{
   const t=e.target,i=+t.dataset.i;if(isNaN(i))return;
-  if(t.dataset.f){S.jobs[i][t.dataset.f]=t.type==='checkbox'?t.checked:t.value;if(t.dataset.f==='pasang'){if(!t.checked)S.jobs[i].pasangOff=true;renderFoto(i)}if(t.dataset.f==='what')autoPasang(i,t.value)}
-  else if(t.dataset.mk!==undefined){S.jobs[i].more[+t.dataset.mk]=t.value;autoPasang(i,t.value)}
+  if(t.dataset.f){S.jobs[i][t.dataset.f]=t.type==='checkbox'?t.checked:t.value;if(t.dataset.f==='pasang')renderFoto(i)}
   else if(t.dataset.ln!==undefined){const L=S.jobs[i].links[+t.dataset.ln];if(t.dataset.lk==='k')L.k=t.value;else{L.u=t.value.trim();setLinkWarn(i,+t.dataset.ln)}}
   else if(t.dataset.h!==undefined){const h=S.jobs[i].how[+t.dataset.h];if(t.dataset.k==='d')h.done=t.checked;else h.t=t.value}
   refresh();
@@ -413,12 +410,11 @@ $('cards').addEventListener('click',e=>{
   if(b.dataset.act==='addhow'){S.jobs[i].how.push({t:'',done:false});renderCards()}
   if(b.dataset.act==='delhow'){S.jobs[i].how.splice(+b.dataset.h,1);renderCards()}
   if(b.dataset.act==='deljob')arm(b,()=>{S.jobs.splice(i,1);renderCards()},'Yakin?');
-  if(b.dataset.act==='cleartime'){S.jobs[i].time='';renderCards()}
-  if(b.dataset.act==='addmore'){S.jobs[i].more.push('');renderCards();const el=document.querySelector('input[data-i="'+i+'"][data-mk="'+(S.jobs[i].more.length-1)+'"]');if(el)el.focus()}
-  if(b.dataset.act==='delmore'){S.jobs[i].more.splice(+b.dataset.n,1);renderCards()}
   if(b.dataset.act==='ladd'){const j=S.jobs[i];if(j.links.length<MAXF){const has=k=>j.links.some(l=>l.k===k);j.links.push({k:!has('before')?'before':!has('after')?'after':'semua',u:''});renderFoto(i);refresh()}}
   if(b.dataset.act==='ldel'){S.jobs[i].links.splice(+b.dataset.n,1);renderFoto(i);refresh()}
 });
+function tab(t){S.tab=t;$('tabPlan').classList.toggle('on',t==='plan');$('tabRep').classList.toggle('on',t==='rep');refresh()}
+$('tabPlan').onclick=()=>tab('plan');$('tabRep').onclick=()=>tab('rep');
 $('btnCopy').onclick=()=>copy($('out').value,$('out'));
 $('btnClar').onclick=()=>copy(clarText());
 
@@ -437,69 +433,9 @@ $('btnSave').onclick=()=>{
 $('hist').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   const h=hist();
-  if(b.dataset.hl!==undefined){const d=h[+b.dataset.hl].data;S.raw=d.raw;S.date=d.date;S.jobs=norm(d.jobs);S.jenis=toArr(d.jenis);S.sesi=d.sesi||'pagi';S.jam=d.jam||CFG.sesi[S.sesi];$('raw').value=d.raw||'';syncCtl();$('work').classList.remove('hidden');renderCards();window.scrollTo({top:0,behavior:'smooth'})}
+  if(b.dataset.hl!==undefined){const d=h[+b.dataset.hl].data;S.raw=d.raw;S.date=d.date;S.jobs=norm(d.jobs);S.jenis=d.jenis||CFG.jenis[0];S.sesi=d.sesi||'pagi';S.jam=d.jam||CFG.sesi[S.sesi];$('raw').value=d.raw||'';syncCtl();$('work').classList.remove('hidden');renderCards();window.scrollTo({top:0,behavior:'smooth'})}
   if(b.dataset.hd!==undefined)arm(b,()=>{h.splice(+b.dataset.hd,1);try{localStorage.setItem(HKEY,JSON.stringify(h))}catch(e){}renderHist()},'Yakin?');
 });
-
-/* ===== JAM ANALOG ===== */
-const CK={h:9,m:0,mode:'h',drag:false};
-const pad2=n=>String(n).padStart(2,'0');
-function polar(r,deg){const a=deg*Math.PI/180;return[130+r*Math.sin(a),130-r*Math.cos(a)]}
-function updHead(){
-  $('cH').textContent=pad2(CK.h);$('cM').textContent=pad2(CK.m);
-  $('cH').classList.toggle('on',CK.mode==='h');$('cM').classList.toggle('on',CK.mode==='m');
-  $('cHint').textContent=CK.mode==='h'?'Pilih jam (lingkar luar 1–12, dalam 13–24)':(CK.h===24?'Jam 24 hanya menit 00':'Pilih menit (geser untuk menit tepat)');
-}
-function drawDial(){
-  let o='<circle cx="130" cy="130" r="124" class="dbg"/>',selDeg,selR,labels=[];
-  if(CK.mode==='h'){
-    for(let i=1;i<=12;i++)labels.push({t:String(i),deg:(i%12)*30,r:100,v:i,c:'dl'});
-    for(let j=13;j<=24;j++)labels.push({t:String(j),deg:(j%12)*30,r:66,v:j,c:'dl in'});
-    selDeg=(CK.h%12)*30;selR=CK.h>=13?66:100;
-    var selV=CK.h;
-  }else{
-    for(let m=0;m<60;m+=5)labels.push({t:pad2(m),deg:m*6,r:100,v:m,c:'dl'});
-    selDeg=CK.m*6;selR=100;var selV=CK.m;
-  }
-  const[kx,ky]=polar(selR,selDeg);
-  o+=`<line x1="130" y1="130" x2="${kx}" y2="${ky}" class="dhand"/><circle cx="130" cy="130" r="4" class="dknob"/><circle cx="${kx}" cy="${ky}" r="${CK.mode==='h'&&selR===66?14:17}" class="dknob"/>`;
-  labels.forEach(l=>{const[x,y]=polar(l.r,l.deg);o+=`<text x="${x}" y="${y}" text-anchor="middle" dy=".35em" class="${l.c}${l.v===selV?' dsel':''}">${l.t}</text>`});
-  if(CK.mode==='m'&&CK.m%5!==0)o+=`<circle cx="${kx}" cy="${ky}" r="3" fill="#fff"/>`;
-  $('dial').innerHTML=o;
-}
-function dialPick(e,final){
-  const r=$('dial').getBoundingClientRect();
-  const x=(e.clientX-r.left)/r.width*260-130,y=(e.clientY-r.top)/r.height*260-130;
-  let ang=Math.atan2(x,-y)*180/Math.PI;if(ang<0)ang+=360;
-  const dist=Math.hypot(x,y);
-  if(CK.mode==='h'){
-    const idx=Math.round(ang/30)%12;
-    CK.h=dist<83?(idx===0?24:idx+12):(idx===0?12:idx);
-    if(CK.h===24)CK.m=0;
-  }else CK.m=CK.h===24?0:Math.round(ang/6)%60;
-  if(final&&CK.mode==='h'&&CK.h!==24)CK.mode='m';
-  drawDial();updHead();
-}
-function openClock(){
-  const m=/^(\d{1,2})[.:](\d{2})$/.exec(S.jam||'');
-  CK.h=m?+m[1]:9;CK.m=m?+m[2]:0;
-  if(CK.h<1)CK.h=24;if(CK.h>24)CK.h=24;if(CK.m>59)CK.m=0;if(CK.h===24)CK.m=0;
-  CK.mode='h';drawDial();updHead();$('clockModal').classList.remove('hidden');
-}
-function closeClock(){$('clockModal').classList.add('hidden')}
-(function(){
-  const d=$('dial');
-  d.addEventListener('pointerdown',e=>{CK.drag=true;try{d.setPointerCapture(e.pointerId)}catch(x){}dialPick(e,false)});
-  d.addEventListener('pointermove',e=>{if(CK.drag)dialPick(e,false)});
-  d.addEventListener('pointerup',e=>{if(!CK.drag)return;CK.drag=false;dialPick(e,true)});
-  d.addEventListener('pointercancel',()=>{CK.drag=false});
-  $('cH').onclick=()=>{CK.mode='h';drawDial();updHead()};
-  $('cM').onclick=()=>{if(CK.h===24)return;CK.mode='m';drawDial();updHead()};
-  $('cCancel').onclick=closeClock;
-  $('cOk').onclick=()=>{S.jam=pad2(CK.h)+'.'+pad2(CK.m);S.sesi=sesiFromJam(S.jam);fillJam();refresh();closeClock()};
-  $('clockModal').addEventListener('click',e=>{if(e.target===$('clockModal'))closeClock()});
-  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeClock()});
-})();
 
 /* ===== LINK SIMULASI (Google Drive) ===== */
 const KIND={before:'Before',after:'After',semua:'Semua foto'};
@@ -533,6 +469,8 @@ function buildAdmin(){
     <label>Template kalimat judul — pakai {sapaan} {jenis} {waktu} {jam}</label><input id="a_template">
     <div class="prev" id="a_prev"></div>
     <label>Pilihan jenis pekerjaan (satu per baris)</label><textarea id="a_jenis" rows="4"></textarea>
+    <label>Jam otomatis per waktu</label>
+    <div class="grid3"><div><label style="margin-top:0">Pagi</label><input id="a_pagi"></div><div><label style="margin-top:0">Siang</label><input id="a_siang"></div><div><label style="margin-top:0">Sore</label><input id="a_sore"></div><div><label style="margin-top:0">Malam</label><input id="a_malam"></div></div>
     <label>Zona waktu (ditulis setelah jam)</label><input id="a_zona">
     <label>Nama label di pesan WA</label><div class="grid">${lblIn}</div>
     <label>Kalimat penutup (opsional, ditaruh di akhir pesan)</label><textarea id="a_penutup" rows="2" placeholder="mis. Terima kasih pak 🙏🏻"></textarea>
@@ -547,6 +485,7 @@ function fillAdmin(){
   if(!admBuilt)return;
   const c=CFG;
   $('a_sapaan').value=c.sapaan;$('a_template').value=c.template;$('a_jenis').value=c.jenis.join('\n');
+  ['pagi','siang','sore','malam'].forEach(k=>$('a_'+k).value=c.sesi[k]);
   $('a_zona').value=c.zona;$('a_penutup').value=c.penutup;
   Object.keys(c.labels).forEach(k=>$('a_l_'+k).value=c.labels[k]);
   Object.keys(c.wajib).forEach(k=>$('a_w_'+k).checked=c.wajib[k]);
@@ -556,6 +495,7 @@ function readAdmin(){
   const c=JSON.parse(JSON.stringify(CFG));
   c.sapaan=$('a_sapaan').value.trim();c.template=$('a_template').value.trim()||DEF.template;
   c.jenis=$('a_jenis').value.split('\n').map(x=>x.trim().toLowerCase()).filter(Boolean);
+  ['pagi','siang','sore','malam'].forEach(k=>c.sesi[k]=$('a_'+k).value.trim());
   c.zona=$('a_zona').value.trim();c.penutup=$('a_penutup').value;
   Object.keys(c.labels).forEach(k=>c.labels[k]=$('a_l_'+k).value.trim()||DEF.labels[k]);
   Object.keys(c.wajib).forEach(k=>c.wajib[k]=$('a_w_'+k).checked);
@@ -572,12 +512,14 @@ async function writeCfg(obj,okMsg){
 function saveAdmin(){
   const c=readAdmin(),msg=$('a_msg');
   if(!c.jenis.length){msg.textContent='Pilihan jenis pekerjaan minimal satu.';return}
+  for(const k of ['pagi','siang','sore','malam'])if(!/^\d{1,2}[.:]\d{2}$/.test(c.sesi[k])){msg.textContent='Jam '+k+' harus berformat 09.00';return}
   writeCfg(c);
 }
 
 /* ===== SAMBUNG KE PENYIMPANAN BERSAMA ===== */
 function applyCfg(d){
   CFG=mergeCfg(d);
+  if(!S.jobs.length){S.jam=CFG.sesi[S.sesi]||S.jam;if($('jam'))$('jam').value=S.jam}
   fillJenis();refresh();
   if(!admBuilt||!$('adm').contains(document.activeElement))fillAdmin();
 }
@@ -608,7 +550,7 @@ async function connect(){
   renderHist();fillJenis();
   try{
     const d=JSON.parse(localStorage.getItem(KEY)||'null');
-    if(d&&d.jobs&&d.jobs.length){S.raw=d.raw||'';S.date=d.date||iso(new Date());S.jobs=norm(d.jobs);S.jenis=toArr(d.jenis);S.sesi=d.sesi||'pagi';S.jam=d.jam||CFG.sesi[S.sesi];$('raw').value=S.raw;syncCtl();$('work').classList.remove('hidden');renderCards()}
+    if(d&&d.jobs&&d.jobs.length){S.raw=d.raw||'';S.date=d.date||iso(new Date());S.jobs=norm(d.jobs);S.jenis=d.jenis||'pengantaran';S.sesi=d.sesi||'pagi';S.jam=d.jam||CFG.sesi[S.sesi];$('raw').value=S.raw;syncCtl();$('work').classList.remove('hidden');renderCards()}
   }catch(e){}
   connect();
 })();
